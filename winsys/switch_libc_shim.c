@@ -119,9 +119,12 @@ int munmap(void *addr, size_t length)
 
 /* ------------------------------------------------------------------------- */
 /* 2. Missing POSIX/GNU libc.                                                  */
+/* Weak so app-level shims (dusklight switch_posix_shim) can override.        */
 /* ------------------------------------------------------------------------- */
+#define NVK_SHIM_WEAK __attribute__((weak))
 
 /* Aligned allocation (Mesa/anv/nvk). */
+NVK_SHIM_WEAK
 int posix_memalign(void **memptr, size_t alignment, size_t size)
 {
    if (alignment < sizeof(void *) || (alignment & (alignment - 1)) != 0)
@@ -164,6 +167,7 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
 }
 
 /* Advisory file locks — single process, so locking is a no-op success. */
+NVK_SHIM_WEAK
 int flock(int fd, int operation)
 {
    (void)fd; (void)operation;
@@ -172,6 +176,7 @@ int flock(int fd, int operation)
 
 /* No signals worth masking in a homebrew (newlib declares this but ships no
  * impl); report success and leave the old mask untouched. */
+NVK_SHIM_WEAK
 int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset)
 {
    (void)how; (void)set;
@@ -181,6 +186,7 @@ int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset)
 }
 
 /* Runtime config queries. Return sane Tegra X1 values; -1/EINVAL otherwise. */
+NVK_SHIM_WEAK
 long sysconf(int name)
 {
    switch (name) {
@@ -210,18 +216,18 @@ long sysconf(int name)
 /* ---- POSIX regex (driconf app-profile matching) -------------------------- *
  * We don't ship driconf profiles, so compile "succeeds" and every match
  * misses — no profiles get applied. Avoids dragging in a regex engine. */
-int regcomp(void *preg, const char *regex, int cflags)
+NVK_SHIM_WEAK int regcomp(void *preg, const char *regex, int cflags)
 {
    (void)preg; (void)regex; (void)cflags;
    return 0;
 }
-int regexec(const void *preg, const char *str, size_t nmatch,
+NVK_SHIM_WEAK int regexec(const void *preg, const char *str, size_t nmatch,
             void *pmatch, int eflags)
 {
    (void)preg; (void)str; (void)nmatch; (void)pmatch; (void)eflags;
    return 1;  /* REG_NOMATCH */
 }
-void regfree(void *preg)
+NVK_SHIM_WEAK void regfree(void *preg)
 {
    (void)preg;
 }
@@ -229,14 +235,14 @@ void regfree(void *preg)
 /* ---- Filesystem odds and ends newlib/devkitA64 omit ---------------------- */
 
 /* No pipes/fifos on Horizon. */
-int pipe(int pipefd[2])      { (void)pipefd; errno = ENOSYS; return -1; }
-int mkfifo(const char *path, mode_t mode) { (void)path; (void)mode; errno = ENOSYS; return -1; }
+NVK_SHIM_WEAK int pipe(int pipefd[2])      { (void)pipefd; errno = ENOSYS; return -1; }
+NVK_SHIM_WEAK int mkfifo(const char *path, mode_t mode) { (void)path; (void)mode; errno = ENOSYS; return -1; }
 
 /* DIR carries no public fd on devkitA64; cache dir-scan just degrades. */
-int dirfd(void *dirp)        { (void)dirp; errno = ENOTSUP; return -1; }
+NVK_SHIM_WEAK int dirfd(void *dirp)        { (void)dirp; errno = ENOTSUP; return -1; }
 
 /* Only the AT_FDCWD + absolute-path case is exercised (disk cache). */
-int fstatat(int dirfd_, const char *path, struct stat *st, int flags)
+NVK_SHIM_WEAK int fstatat(int dirfd_, const char *path, struct stat *st, int flags)
 {
    (void)dirfd_;
    if (flags & AT_SYMLINK_NOFOLLOW)
@@ -246,22 +252,22 @@ int fstatat(int dirfd_, const char *path, struct stat *st, int flags)
 
 /* ---- User/credential layer (Rust-std unix + Mesa) ------------------------ *
  * Single-user homebrew: present as root, no passwd db. */
-int getpwuid_r(uid_t uid, void *pwd, char *buf, size_t buflen, void **result)
+NVK_SHIM_WEAK int getpwuid_r(uid_t uid, void *pwd, char *buf, size_t buflen, void **result)
 {
    (void)uid; (void)pwd; (void)buf; (void)buflen;
    if (result) *result = NULL;
    return 0;  /* "not found" with no error, per getpwuid_r contract */
 }
 
-int chown(const char *path, uid_t o, gid_t g)  { (void)path; (void)o; (void)g; return 0; }
-int fchown(int fd, uid_t o, gid_t g)            { (void)fd; (void)o; (void)g; return 0; }
-int lchown(const char *path, uid_t o, gid_t g)  { (void)path; (void)o; (void)g; return 0; }
-int chroot(const char *path)                    { (void)path; return 0; }
+NVK_SHIM_WEAK int chown(const char *path, uid_t o, gid_t g)  { (void)path; (void)o; (void)g; return 0; }
+NVK_SHIM_WEAK int fchown(int fd, uid_t o, gid_t g)            { (void)fd; (void)o; (void)g; return 0; }
+NVK_SHIM_WEAK int lchown(const char *path, uid_t o, gid_t g)  { (void)path; (void)o; (void)g; return 0; }
+NVK_SHIM_WEAK int chroot(const char *path)                    { (void)path; return 0; }
 
-uid_t getuid(void)   { return 0; }
-uid_t geteuid(void)  { return 0; }
-gid_t getgid(void)   { return 0; }
-gid_t getegid(void)  { return 0; }
-pid_t getppid(void)  { return 1; }
+NVK_SHIM_WEAK uid_t getuid(void)   { return 0; }
+NVK_SHIM_WEAK uid_t geteuid(void)  { return 0; }
+NVK_SHIM_WEAK gid_t getgid(void)   { return 0; }
+NVK_SHIM_WEAK gid_t getegid(void)  { return 0; }
+NVK_SHIM_WEAK pid_t getppid(void)  { return 1; }
 
 #endif /* __SWITCH__ */

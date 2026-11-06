@@ -9,7 +9,7 @@ PREFIX="${NATIVE_PREFIX:-/work/native-prefix}"
 
 # Idempotent: the prefix lives on the persistent /work mount, so once built the native tools
 # survive across --rm containers — skip the (slow) x86 rebuild on subsequent runs.
-if [ -x "$PREFIX/bin/mesa_clc" ]; then
+if [ -x "$PREFIX/bin/mesa_clc" ] && [ -x "$PREFIX/bin/vtn_bindgen" ]; then
   echo "native tools already present at $PREFIX/bin (skipping rebuild)"
   exit 0
 fi
@@ -29,9 +29,17 @@ meson setup "$NB" \
   -Dstatic-libclc=all \
   "$@"
 
-# Build + install just the tools (and whatever they depend on). `ninja install` honors the
-# install-*-compiler options, placing mesa_clc + the precomp compiler on PATH.
-ninja -C "$NB"
-ninja -C "$NB" install
+# Build tools. Full `ninja` may fail linking the native NVK ICD (.so) on Switch diagnostic
+# externs (g_drm_shim_log_sink) — that ICD is unused; we need mesa_clc + vtn_bindgen.
+ninja -C "$NB" src/compiler/clc/mesa_clc src/compiler/spirv/vtn_bindgen || ninja -C "$NB" || true
+if [ ! -x "$NB/src/compiler/clc/mesa_clc" ] || [ ! -x "$NB/src/compiler/spirv/vtn_bindgen" ]; then
+  echo "ERROR: mesa_clc / vtn_bindgen were not built"
+  exit 1
+fi
+mkdir -p "$PREFIX/bin"
+cp -f "$NB/src/compiler/clc/mesa_clc" "$PREFIX/bin/"
+cp -f "$NB/src/compiler/spirv/vtn_bindgen" "$PREFIX/bin/"
+# Optional: meson install for anything else marked install-mesa-clc (ignore ICD link errors).
+ninja -C "$NB" install || true
 echo "=== installed native tools ==="
-ls -la "$PREFIX/bin/" | grep -iE 'clc|precomp|nak' || true
+ls -la "$PREFIX/bin/" | grep -iE 'clc|vtn|precomp|nak' || true

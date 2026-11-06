@@ -45,3 +45,8 @@ dan-re/_*.log
 
 # The reverse-engineered .nro itself (Dan's MIT-released binary; not redistributable from us)
 dan-re/*.nro
+
+# Upstream Mesa source archives (download via scripts, do not commit)
+mesa-*.tar.*
+_nm_tmp/
+
